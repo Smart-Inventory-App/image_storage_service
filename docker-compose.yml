@@ -17,5 +17,5 @@ services:
       retries: 3
 
 networks:
-  bazaar-network:
+  tpp-network:
     driver: bridge
