@@ -17,58 +17,39 @@ cloudinary.config(
 )
 
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-VIDEO_TYPES = {"video/mp4", "video/webm"}
-ALL_ALLOWED_TYPES = IMAGE_TYPES | VIDEO_TYPES
 
 FOLDER_RULES: dict[str, dict] = {
-    "bazaar/profiles": {
-        "allowed_types": IMAGE_TYPES,
-        "max_mb_key": "MAX_IMAGE_PROFILE_MB",
-        "resource_type": "image",
-        "label": "imágenes de perfil",
-    },
     "bazaar/products": {
         "allowed_types": IMAGE_TYPES,
         "max_mb_key": "MAX_IMAGE_PRODUCT_MB",
         "resource_type": "image",
         "label": "imágenes de producto",
     },
-    "bazaar/videos": {
-        "allowed_types": VIDEO_TYPES,
-        "max_mb_key": "MAX_VIDEO_MB",
-        "resource_type": "video",
-        "label": "videos de producto",
+    "bazaar/ocr": {
+        "allowed_types": IMAGE_TYPES,
+        "max_mb_key": "MAX_IMAGE_OCR_MB",
+        "resource_type": "image",
+        "label": "imágenes para OCR",
     },
-}
-
-_DEFAULT_RULE = {
-    "allowed_types": IMAGE_TYPES,
-    "max_mb_key": "MAX_IMAGE_PRODUCT_MB",
-    "resource_type": "image",
-    "label": "archivos",
 }
 
 
 def _get_rule(folder: str) -> dict:
-    base = FOLDER_RULES.get(folder, _DEFAULT_RULE)
-    return {**base, "max_mb": getattr(settings, base["max_mb_key"])}
+    rule = FOLDER_RULES.get(folder)
+    if rule is None:
+        valid = ", ".join(sorted(FOLDER_RULES))
+        raise ValueError(f"Carpeta '{folder}' no permitida. Carpetas válidas: {valid}")
+    return {**rule, "max_mb": getattr(settings, rule["max_mb_key"])}
 
 
 async def upload_file(file: UploadFile, folder: str) -> dict:
     rule = _get_rule(folder)
 
-    if file.content_type not in ALL_ALLOWED_TYPES:
-        accepted = ", ".join(sorted(ALL_ALLOWED_TYPES))
-        raise ValueError(
-            f"Formato no soportado: '{file.content_type}'. "
-            f"Formatos aceptados: {accepted}"
-        )
-
     if file.content_type not in rule["allowed_types"]:
         accepted = ", ".join(sorted(rule["allowed_types"]))
         raise ValueError(
-            f"Formato '{file.content_type}' no permitido para {rule['label']} "
-            f"(carpeta '{folder}'). Formatos aceptados: {accepted}"
+            f"Formato '{file.content_type}' no permitido para {rule['label']}. "
+            f"Formatos aceptados: {accepted}"
         )
 
     contents = await file.read()
@@ -80,26 +61,16 @@ async def upload_file(file: UploadFile, folder: str) -> dict:
             f"para {rule['label']} (carpeta '{folder}')"
         )
 
-    resource_type = rule["resource_type"]
-    data = _compress(contents) if resource_type == "image" else contents
+    data = _compress(contents)
 
-    result = cloudinary.uploader.upload(
-        data,
-        folder=folder,
-        resource_type=resource_type,
-    )
+    result = cloudinary.uploader.upload(data, folder=folder, resource_type="image")
 
     url = result["secure_url"]
     public_id = result["public_id"]
 
-    logger.info(
-        "Archivo subido: public_id=%s resource_type=%s url=%s",
-        public_id,
-        resource_type,
-        url,
-    )
+    logger.info("Archivo subido: public_id=%s url=%s", public_id, url)
 
-    return {"url": url, "public_id": public_id, "resource_type": resource_type}
+    return {"url": url, "public_id": public_id, "resource_type": "image"}
 
 
 def delete_file(public_id: str, resource_type: str = "image") -> None:
@@ -111,12 +82,7 @@ def delete_file(public_id: str, resource_type: str = "image") -> None:
             f"(resource_type={resource_type}): {result}"
         )
 
-    logger.info(
-        "Archivo eliminado: public_id=%s resource_type=%s resultado=%s",
-        public_id,
-        resource_type,
-        result.get("result"),
-    )
+    logger.info("Archivo eliminado: public_id=%s resultado=%s", public_id, result.get("result"))
 
 
 def _compress(contents: bytes, max_width: int = 1200) -> bytes:

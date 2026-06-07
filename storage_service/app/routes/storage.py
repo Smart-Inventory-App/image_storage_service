@@ -22,7 +22,7 @@ class DeleteRequest(BaseModel):
 @router.post("/upload")
 async def upload(
     file: UploadFile = File(...),
-    folder: str = Form(default="bazaar/general"),
+    folder: str = Form(default="bazaar/products"),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -38,6 +38,28 @@ async def upload(
         public_id=result["public_id"],
         resource_type=result["resource_type"],
         folder=folder,
+    )
+    db.add(media)
+    await db.commit()
+
+    return {"url": result["url"]}
+
+
+@router.post("/ocr")
+async def upload_ocr(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    try:
+        result = await cloudinary_service.upload_file(file, "bazaar/ocr")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error("Error al subir imagen OCR: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al subir imagen OCR: {exc}")
+
+    media = MediaFile(
+        url=result["url"],
+        public_id=result["public_id"],
+        resource_type=result["resource_type"],
+        folder="bazaar/ocr",
     )
     db.add(media)
     await db.commit()
@@ -77,7 +99,4 @@ async def readyz():
         return {"status": "ok"}
     except Exception as exc:
         logger.error("Cloudinary no disponible: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail="Cloudinary no disponible",
-        )
+        raise HTTPException(status_code=503, detail="Cloudinary no disponible")

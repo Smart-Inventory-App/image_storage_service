@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import Base, engine
 from app.models import MediaFile  # noqa: F401 — registra el modelo en Base.metadata
@@ -15,4 +16,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Storage Service", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["*"],
+)
+
 app.include_router(router, prefix="/storage")
