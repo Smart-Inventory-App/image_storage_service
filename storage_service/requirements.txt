@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+cloudinary
+python-multipart
+Pillow
+python-dotenv
+pydantic-settings
+httpx
+sqlalchemy[asyncio]
+aiosqlite
+pytest
+pytest-asyncio
+pytest-cov
