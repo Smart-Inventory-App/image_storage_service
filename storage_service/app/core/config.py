@@ -7,8 +7,10 @@ class Settings(BaseSettings):
     CLOUDINARY_CLOUD_NAME: str
     CLOUDINARY_API_KEY: str
     CLOUDINARY_API_SECRET: str
-    ALLOWED_SERVICES: str = "*"  
+    ALLOWED_SERVICES: str = "*"
     DATABASE_URL: str = "sqlite+aiosqlite:///./storage.db"
+    JWT_SECRET: str = "change-this-secret-in-production"
+    JWT_ALGORITHM: str = "HS256"
     MAX_IMAGE_PRODUCT_MB: int = 10
     MAX_IMAGE_OCR_MB: int = 10
 

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import get_current_user
 from app.db import get_db
 from app.models import MediaFile
 from app.services import cloudinary_service
@@ -24,6 +25,7 @@ async def upload(
     file: UploadFile = File(...),
     folder: str = Form(default="bazaar/products"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     try:
         result = await cloudinary_service.upload_file(file, folder)
@@ -46,7 +48,11 @@ async def upload(
 
 
 @router.post("/ocr")
-async def upload_ocr(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_ocr(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
     try:
         result = await cloudinary_service.upload_file(file, "bazaar/ocr")
     except ValueError as exc:
@@ -68,7 +74,11 @@ async def upload_ocr(file: UploadFile = File(...), db: AsyncSession = Depends(ge
 
 
 @router.delete("/delete")
-async def delete(body: DeleteRequest, db: AsyncSession = Depends(get_db)):
+async def delete(
+    body: DeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
     row = await db.execute(select(MediaFile).where(MediaFile.url == body.url))
     media = row.scalar_one_or_none()
 

@@ -6,6 +6,7 @@ Pillow
 python-dotenv
 pydantic-settings
 httpx
+python-jose[cryptography]
 sqlalchemy[asyncio]
 aiosqlite
 pytest
