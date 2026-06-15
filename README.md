@@ -1,9 +1,8 @@
-# storage_service
+# image_storage_service — Smart Inventory
 
-Microservicio de Bazaar encargado de subir y eliminar archivos multimedia en Cloudinary. Persiste la relación `url → public_id` en una base de datos SQLite local, de modo que los servicios consumidores solo necesitan guardar y operar con la URL pública.
-
-# Coverage: 
 [![codecov](https://codecov.io/gh/bazaar-tpg/external_storage_service/graph/badge.svg?token=MW6HMDN0F9)](https://codecov.io/gh/bazaar-tpg/external_storage_service)
+
+Microservicio de almacenamiento de imágenes. Sube y elimina archivos en Cloudinary, y persiste la relación `url → public_id` en SQLite para que los servicios consumidores solo operen con URLs públicas.
 
 ---
 
@@ -11,21 +10,9 @@ Microservicio de Bazaar encargado de subir y eliminar archivos multimedia en Clo
 
 - Python 3.11 + FastAPI
 - Cloudinary (almacenamiento externo)
-- Pillow (compresión de imágenes)
-- SQLAlchemy async + SQLite
-- Docker
-
----
-
-## Reglas por tipo de media
-
-| Carpeta (`folder`) | Tipos aceptados | Límite |
-|---|---|---|
-| `bazaar/profiles` | JPEG, PNG, WebP | 5 MB |
-| `bazaar/products` | JPEG, PNG, WebP | 10 MB |
-| `bazaar/videos` | MP4, WebM | 50 MB |
-
-Las imágenes se comprimen automáticamente (máx. 1200 px de ancho, JPEG quality 85) antes de subirse. Los videos se suben sin modificar. Cualquier otro formato es rechazado con un error descriptivo.
+- Pillow (compresión de imágenes antes de subir)
+- SQLAlchemy async + SQLite (aiosqlite)
+- JWT HS256 — valida tokens del servicio Auth
 
 ---
 
@@ -33,14 +20,15 @@ Las imágenes se comprimen automáticamente (máx. 1200 px de ancho, JPEG qualit
 
 ### `POST /storage/upload`
 
-Sube un archivo a Cloudinary y persiste la URL internamente.
+Sube una imagen de producto a Cloudinary.
 
+**Auth:** `Authorization: Bearer <token>`  
 **Body:** `multipart/form-data`
 
 | Campo | Tipo | Requerido | Default |
-|---|---|---|---|
+|-------|------|-----------|---------|
 | `file` | archivo | sí | — |
-| `folder` | string | no | `bazaar/general` |
+| `folder` | string | no | `bazaar/products` |
 
 **Respuesta 200:**
 ```json
@@ -48,35 +36,49 @@ Sube un archivo a Cloudinary y persiste la URL internamente.
 ```
 
 **Errores:**
-- `400` — formato no soportado, tipo incompatible con la carpeta, o archivo demasiado grande
+- `400` — formato no soportado o archivo demasiado grande
+- `401` — token inválido o ausente
 - `500` — error al comunicarse con Cloudinary
+
+---
+
+### `POST /storage/ocr`
+
+Sube una imagen para procesamiento OCR (escaneo de productos).
+
+**Auth:** `Authorization: Bearer <token>`  
+**Body:** `multipart/form-data` — campo `file`
+
+**Respuesta 200:**
+```json
+{ "url": "https://res.cloudinary.com/..." }
+```
 
 ---
 
 ### `DELETE /storage/delete`
 
-Elimina un archivo de Cloudinary y borra el registro interno. Recibe la URL pública — el servicio resuelve el `public_id` internamente.
+Elimina un archivo de Cloudinary y borra su registro interno.
 
+**Auth:** `Authorization: Bearer <token>`  
 **Body:** `application/json`
 
-| Campo | Tipo | Requerido |
-|---|---|---|
-| `url` | string | sí |
-
-**Respuesta 200:**
 ```json
-{ "ok": true }
+{ "url": "https://res.cloudinary.com/..." }
 ```
 
+**Respuesta 200:** `{ "ok": true }`
+
 **Errores:**
-- `404` — URL no encontrada en la base de datos
+- `401` — token inválido o ausente
+- `404` — URL no registrada en la base de datos
 - `500` — error al comunicarse con Cloudinary
 
 ---
 
 ### `GET /storage/livez`
 
-Liveness probe. Sin llamadas externas.
+Liveness probe. Sin dependencias externas.
 
 **Respuesta 200:** `{ "status": "ok" }`
 
@@ -86,8 +88,19 @@ Liveness probe. Sin llamadas externas.
 
 Readiness probe. Hace ping a Cloudinary.
 
-**Respuesta 200:** `{ "status": "ok" }`
+**Respuesta 200:** `{ "status": "ok" }`  
 **Respuesta 503:** `{ "status": "error", "detail": "Cloudinary no disponible" }`
+
+---
+
+## Límites por tipo de imagen
+
+| Carpeta | Límite |
+|---------|--------|
+| `bazaar/products` | 10 MB |
+| `bazaar/ocr` | 10 MB |
+
+Las imágenes se comprimen automáticamente (máx. 1200 px de ancho, JPEG quality 85) antes de subirse a Cloudinary.
 
 ---
 
@@ -99,46 +112,80 @@ Crear `.env` a partir de `.env.example`:
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
-DATABASE_URL=sqlite+aiosqlite:///./storage.db
-MAX_IMAGE_PROFILE_MB=5
-MAX_IMAGE_PRODUCT_MB=10
-MAX_VIDEO_MB=50
-```
 
-> Para producción reemplazar `DATABASE_URL` con una conexión PostgreSQL:
-> `postgresql+asyncpg://user:pass@host/dbname`
+# JWT (mismo secret que el servicio Auth)
+JWT_SECRET=change-this-secret-in-production
+JWT_ALGORITHM=HS256
+
+# Límites en MB
+MAX_IMAGE_PRODUCT_MB=10
+MAX_IMAGE_OCR_MB=10
+
+# DB interna
+DATABASE_URL=sqlite+aiosqlite:///./storage.db
+
+# Servicios autorizados (* = cualquiera con token válido)
+ALLOWED_SERVICES=*
+```
 
 ---
 
-## Correr en local
+## Setup local
 
 ```bash
+cd storage_service
+
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8004
 ```
 
-Documentación interactiva disponible en `http://localhost:8000/docs`.
-
----
-
-## Tests
-
-```bash
-pytest tests/ -v
-```
-
-Los tests usan una base de datos en memoria y mockean Cloudinary — no requieren credenciales ni conexión.
+Swagger disponible en `http://localhost:8004/docs`.
 
 ---
 
 ## Docker
 
 ```bash
-docker build -t storage_service .
-docker run --env-file .env -p 8004:8000 storage_service
+docker-compose up -d
+```
+
+El servicio queda disponible en `http://localhost:8004`.
+
+---
+
+## Tests
+
+```bash
+cd storage_service
+pytest tests/ -v
+```
+
+Los tests usan base de datos en memoria y mockean Cloudinary — no requieren credenciales.
+
+---
+
+## Estructura
+
+```
+image_storage_service/
+├── storage_service/
+│   ├── app/
+│   │   ├── core/
+│   │   │   ├── config.py           # Settings (pydantic-settings)
+│   │   │   └── security.py         # Validación JWT
+│   │   ├── routes/
+│   │   │   └── storage.py          # /upload, /ocr, /delete, /livez, /readyz
+│   │   ├── services/
+│   │   │   └── cloudinary_service.py  # Upload/delete en Cloudinary + compresión
+│   │   ├── db.py                   # Sesión async SQLAlchemy
+│   │   ├── models.py               # MediaFile (url, public_id, resource_type)
+│   │   └── main.py
+│   └── tests/
+├── docker-compose.yml
+└── .env.example
 ```
 
 ---
@@ -146,19 +193,13 @@ docker run --env-file .env -p 8004:8000 storage_service
 ## Flujo de integración
 
 ```
-Cliente
-  │  POST /products (con imagen)
+App_backend
+  │  POST /storage/upload  (file + folder, Bearer token)
   ▼
-product_service
-  │  POST /storage/upload  (file + folder)
-  ▼
-storage_service  ──►  Cloudinary
+image_storage_service  ──►  Cloudinary
   │  { "url": "https://res.cloudinary.com/..." }
   ▼
-product_service  guarda la URL en su BD
-  │  responde al cliente
-  ▼
-Cliente
+App_backend  guarda imagen_url en la tabla products
 ```
 
 ### Ejemplo desde otro servicio (Python)
@@ -166,41 +207,27 @@ Cliente
 ```python
 import httpx
 
-async def upload_product_image(file_bytes: bytes, filename: str) -> str:
+async def upload_product_image(file_bytes: bytes, filename: str, token: str) -> str:
     async with httpx.AsyncClient() as client:
         r = await client.post(
-            "http://storage_service:8000/storage/upload",
+            "http://storage_service:8004/storage/upload",
+            headers={"Authorization": f"Bearer {token}"},
             files={"file": (filename, file_bytes, "image/jpeg")},
             data={"folder": "bazaar/products"},
             timeout=30.0,
         )
         r.raise_for_status()
-        return r.json()["url"]  # guardar esta URL en la BD del servicio
+        return r.json()["url"]
 
-async def delete_product_image(url: str) -> None:
+async def delete_product_image(url: str, token: str) -> None:
     async with httpx.AsyncClient() as client:
-        r = await client.request(
-            "DELETE",
-            "http://storage_service:8000/storage/delete",
+        r = await client.delete(
+            "http://storage_service:8004/storage/delete",
+            headers={"Authorization": f"Bearer {token}"},
             json={"url": url},
             timeout=10.0,
         )
         r.raise_for_status()
 ```
 
-> Los servicios consumidores solo guardan la **URL**. El `public_id` de Cloudinary es un detalle interno de `storage_service`.
-
----
-
-## docker-compose (agregar al compose raíz)
-
-```yaml
-storage_service:
-  build: ./storage_service
-  ports:
-    - "8004:8000"
-  env_file:
-    - ./storage_service/.env
-  networks:
-    - bazaar-network
-```
+> Los servicios consumidores solo guardan la **URL**. El `public_id` de Cloudinary es un detalle interno de este servicio.
