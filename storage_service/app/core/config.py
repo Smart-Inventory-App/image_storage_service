@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     MAX_IMAGE_PRODUCT_MB: int = 10
     MAX_IMAGE_OCR_MB: int = 10
+    # Vida útil de las imágenes subidas a /storage/temp. El consumidor (ocr_service)
+    # las descarta al terminar; este TTL es la red de seguridad para /storage/temp/purge.
+    TEMP_UPLOAD_TTL_SECONDS: int = 900
 
 
 settings = Settings()
