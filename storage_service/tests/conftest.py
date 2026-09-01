@@ -7,6 +7,7 @@ os.environ.setdefault("CLOUDINARY_CLOUD_NAME", "test_cloud")
 os.environ.setdefault("CLOUDINARY_API_KEY", "test_key")
 os.environ.setdefault("CLOUDINARY_API_SECRET", "test_secret")
 
+from app.core.security import get_current_user  # noqa: E402
 from app.db import Base, get_db  # noqa: E402
 from app.main import app
 from app.models import MediaFile  # noqa: F401
@@ -28,6 +29,9 @@ async def setup_test_db():
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    # La validación del JWT se testea en el servicio Auth; acá se inyecta un
+    # usuario ya autenticado para poder ejercitar las rutas protegidas.
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "test-user"}
     yield
     app.dependency_overrides.clear()
     await engine.dispose()

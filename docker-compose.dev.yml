@@ -6,7 +6,7 @@ services:
     ports:
       - "8004:8000"
     env_file:
-      - ./.env
+      - ./storage_service/.env
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/storage/livez" ]

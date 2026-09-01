@@ -18,6 +18,10 @@ cloudinary.config(
 
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
+# Carpeta de trabajo del OCR: las imágenes viven acá sólo mientras el
+# ocr_service las procesa y se descartan al terminar (ver /storage/temp).
+TEMP_OCR_FOLDER = "bazaar/ocr-temp"
+
 FOLDER_RULES: dict[str, dict] = {
     "bazaar/products": {
         "allowed_types": IMAGE_TYPES,
@@ -31,7 +35,21 @@ FOLDER_RULES: dict[str, dict] = {
         "resource_type": "image",
         "label": "imágenes para OCR",
     },
+    TEMP_OCR_FOLDER: {
+        "allowed_types": IMAGE_TYPES,
+        "max_mb_key": "MAX_IMAGE_OCR_MB",
+        "resource_type": "image",
+        "label": "imágenes temporales para OCR",
+        # El OCR aplica su propio pipeline de filtros sobre esta imagen: se
+        # preserva más resolución y calidad que en las carpetas persistentes,
+        # porque comprimir de más degrada el reconocimiento de caracteres.
+        "max_width": 2000,
+        "quality": 95,
+    },
 }
+
+DEFAULT_MAX_WIDTH = 1200
+DEFAULT_QUALITY = 85
 
 
 def _get_rule(folder: str) -> dict:
@@ -61,7 +79,11 @@ async def upload_file(file: UploadFile, folder: str) -> dict:
             f"para {rule['label']} (carpeta '{folder}')"
         )
 
-    data = _compress(contents)
+    data = _compress(
+        contents,
+        max_width=rule.get("max_width", DEFAULT_MAX_WIDTH),
+        quality=rule.get("quality", DEFAULT_QUALITY),
+    )
 
     result = cloudinary.uploader.upload(data, folder=folder, resource_type="image")
 
@@ -85,7 +107,11 @@ def delete_file(public_id: str, resource_type: str = "image") -> None:
     logger.info("Archivo eliminado: public_id=%s resultado=%s", public_id, result.get("result"))
 
 
-def _compress(contents: bytes, max_width: int = 1200) -> bytes:
+def _compress(
+    contents: bytes,
+    max_width: int = DEFAULT_MAX_WIDTH,
+    quality: int = DEFAULT_QUALITY,
+) -> bytes:
     image = Image.open(io.BytesIO(contents))
 
     if image.width > max_width:
@@ -97,5 +123,5 @@ def _compress(contents: bytes, max_width: int = 1200) -> bytes:
         image = image.convert("RGB")
 
     output = io.BytesIO()
-    image.save(output, format="JPEG", quality=85, optimize=True)
+    image.save(output, format="JPEG", quality=quality, optimize=True)
     return output.getvalue()

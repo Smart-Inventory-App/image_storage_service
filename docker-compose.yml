@@ -2,13 +2,13 @@ services:
 
   storage_service:
     build: ./storage_service
-    container_name: storage_service
+    container_name: tpp_storage_service
     ports:
       - "8004:8000"
     env_file:
-      - ./.env
+      - ./storage_service/.env
     networks:
-      - bazaar-network
+      - tpp-net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/storage/livez"]
@@ -17,5 +17,6 @@ services:
       retries: 3
 
 networks:
-  tpp-network:
-    driver: bridge
+  tpp-net:
+    external: true
+    name: tpp-net

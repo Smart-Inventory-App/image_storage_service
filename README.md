@@ -56,6 +56,54 @@ Sube una imagen para procesamiento OCR (escaneo de productos).
 
 ---
 
+### `POST /storage/temp`
+
+Sube una imagen **efímera** para que `ocr_service` le aplique sus filtros y la descarte al terminar. A diferencia de `/storage/ocr`, esta imagen no está pensada para conservarse: la foto que el usuario saca para escanear un producto no debe quedar almacenada.
+
+Se comprime menos que las carpetas persistentes (hasta 2000 px de ancho, JPEG quality 95): reducir de más degrada el reconocimiento de caracteres.
+
+**Auth:** `Authorization: Bearer <token>`  
+**Body:** `multipart/form-data` — campo `file`
+
+**Respuesta 200:**
+```json
+{
+  "url": "https://res.cloudinary.com/.../bazaar/ocr-temp/abc.jpg",
+  "expires_at": "2026-07-29T20:29:03",
+  "ttl_seconds": 900
+}
+```
+
+El consumidor **debe** llamar a `DELETE /storage/temp` al terminar. `expires_at` indica hasta cuándo la imagen sobrevive si no lo hace.
+
+---
+
+### `DELETE /storage/temp`
+
+Descarta una imagen temporal ya procesada.
+
+**Auth:** `Authorization: Bearer <token>`  
+**Body:** `application/json` — `{ "url": "https://res.cloudinary.com/..." }`
+
+**Respuesta 200:** `{ "ok": true }`
+
+**Errores:**
+- `401` — token inválido o ausente
+- `404` — la URL no existe **o no pertenece a la carpeta temporal** (este endpoint no puede eliminar
+  imágenes persistentes)
+
+---
+
+### `POST /storage/temp/purge`
+
+Red de seguridad: elimina las imágenes temporales vencidas que nadie descartó (por ejemplo si el worker del OCR se cayó a mitad del procesamiento). Pensado para un cron o para llamarlo desde el backoffice.
+
+**Auth:** `Authorization: Bearer <token>`
+
+**Respuesta 200:** `{ "purged": 3 }`
+
+---
+
 ### `DELETE /storage/delete`
 
 Elimina un archivo de Cloudinary y borra su registro interno.
@@ -95,12 +143,13 @@ Readiness probe. Hace ping a Cloudinary.
 
 ## Límites por tipo de imagen
 
-| Carpeta | Límite |
-|---------|--------|
-| `bazaar/products` | 10 MB |
-| `bazaar/ocr` | 10 MB |
+| Carpeta | Endpoint | Límite | Compresión | Persistencia |
+|---------|----------|--------|------------|--------------|
+| `bazaar/products` | `/storage/upload` | 10 MB | 1200 px · q85 | permanente |
+| `bazaar/ocr` | `/storage/ocr` | 10 MB | 1200 px · q85 | permanente |
+| `bazaar/ocr-temp` | `/storage/temp` | 10 MB | 2000 px · q95 | efímera (TTL 15 min) |
 
-Las imágenes se comprimen automáticamente (máx. 1200 px de ancho, JPEG quality 85) antes de subirse a Cloudinary.
+Las imágenes se comprimen automáticamente antes de subirse a Cloudinary. La carpeta temporal preserva más resolución y calidad porque el OCR aplica su propio pipeline de filtros sobre ella.
 
 ---
 
@@ -120,6 +169,9 @@ JWT_ALGORITHM=HS256
 # Límites en MB
 MAX_IMAGE_PRODUCT_MB=10
 MAX_IMAGE_OCR_MB=10
+
+# Vida útil de las imágenes de /storage/temp (segundos)
+TEMP_UPLOAD_TTL_SECONDS=900
 
 # DB interna
 DATABASE_URL=sqlite+aiosqlite:///./storage.db
@@ -177,7 +229,7 @@ image_storage_service/
 │   │   │   ├── config.py           # Settings (pydantic-settings)
 │   │   │   └── security.py         # Validación JWT
 │   │   ├── routes/
-│   │   │   └── storage.py          # /upload, /ocr, /delete, /livez, /readyz
+│   │   │   └── storage.py          # /upload, /ocr, /temp, /delete, /livez, /readyz
 │   │   ├── services/
 │   │   │   └── cloudinary_service.py  # Upload/delete en Cloudinary + compresión
 │   │   ├── db.py                   # Sesión async SQLAlchemy
@@ -200,6 +252,26 @@ image_storage_service  ──►  Cloudinary
   │  { "url": "https://res.cloudinary.com/..." }
   ▼
 App_backend  guarda imagen_url en la tabla products
+```
+
+### Flujo Temporal (Especifico para el OCR)
+
+La imagen que se escanea no se conserva: existe sólo mientras el OCR la procesa.
+
+```
+ocr_service
+  │  1) POST /storage/temp  (file, Bearer token)
+  ▼
+image_storage_service  ──►  Cloudinary (bazaar/ocr-temp)
+  │  { "url": ..., "expires_at": ... }
+  ▼
+ocr_service  descarga la URL, aplica sus filtros (OpenCV) y reconoce el texto
+  │  2) DELETE /storage/temp  ← al terminar, salga bien o mal
+  ▼
+image_storage_service  borra el archivo en Cloudinary y su registro interno
+
+  Si el paso 2 nunca llega (worker caído), POST /storage/temp/purge
+  elimina las temporales vencidas.
 ```
 
 ### Ejemplo desde otro servicio (Python)
