@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 os.environ.setdefault("CLOUDINARY_CLOUD_NAME", "test_cloud")
 os.environ.setdefault("CLOUDINARY_API_KEY", "test_key")
 os.environ.setdefault("CLOUDINARY_API_SECRET", "test_secret")
+os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from app.core.security import get_current_user  # noqa: E402
 from app.db import Base, get_db  # noqa: E402

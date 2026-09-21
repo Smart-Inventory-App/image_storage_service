@@ -9,12 +9,11 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str
     ALLOWED_SERVICES: str = "*"
     DATABASE_URL: str = "sqlite+aiosqlite:///./storage.db"
-    JWT_SECRET: str = "change-this-secret-in-production"
+
+    JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     MAX_IMAGE_PRODUCT_MB: int = 10
     MAX_IMAGE_OCR_MB: int = 10
-    # Vida útil de las imágenes subidas a /storage/temp. El consumidor (ocr_service)
-    # las descarta al terminar; este TTL es la red de seguridad para /storage/temp/purge.
     TEMP_UPLOAD_TTL_SECONDS: int = 900
 
 
