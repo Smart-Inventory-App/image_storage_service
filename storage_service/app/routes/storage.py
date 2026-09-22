@@ -52,7 +52,7 @@ async def _discard(url: str, db: AsyncSession, folder: str | None = None) -> Non
 @router.post("/upload")
 async def upload(
     file: UploadFile = File(...),
-    folder: str = Form(default="bazaar/products"),
+    folder: str = Form(default="tpp/products"),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
@@ -83,7 +83,7 @@ async def upload_ocr(
     _user: dict = Depends(get_current_user),
 ):
     try:
-        result = await cloudinary_service.upload_file(file, "bazaar/ocr")
+        result = await cloudinary_service.upload_file(file, "tpp/ocr")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -94,7 +94,7 @@ async def upload_ocr(
         url=result["url"],
         public_id=result["public_id"],
         resource_type=result["resource_type"],
-        folder="bazaar/ocr",
+        folder="tpp/ocr",
     )
     db.add(media)
     await db.commit()
