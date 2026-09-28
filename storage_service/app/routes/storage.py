@@ -12,7 +12,12 @@ from app.core.security import get_current_user
 from app.db import get_db
 from app.models import MediaFile
 from app.services import cloudinary_service
-from app.services.cloudinary_service import TEMP_OCR_FOLDER
+from app.services.cloudinary_service import (
+    OCR_FOLDER,
+    PRODUCTS_FOLDER,
+    TEMP_OCR_FOLDER,
+    folder_aliases,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +31,13 @@ class DeleteRequest(BaseModel):
 async def _discard(url: str, db: AsyncSession, folder: str | None = None) -> None:
     """Borra el archivo de Cloudinary y su registro interno.
 
-    Si se pasa `folder`, sólo se aceptan URLs de esa carpeta: evita que un
-    endpoint acotado (p. ej. /temp) pueda eliminar imágenes persistentes.
+    Si se pasa `folder`, sólo se aceptan URLs de esa carpeta (o de su nombre
+    heredado): evita que un endpoint acotado (p. ej. /temp) pueda eliminar
+    imágenes persistentes.
     """
     query = select(MediaFile).where(MediaFile.url == url)
     if folder is not None:
-        query = query.where(MediaFile.folder == folder)
+        query = query.where(MediaFile.folder.in_(folder_aliases(folder)))
 
     row = await db.execute(query)
     media = row.scalar_one_or_none()
@@ -52,7 +58,7 @@ async def _discard(url: str, db: AsyncSession, folder: str | None = None) -> Non
 @router.post("/upload")
 async def upload(
     file: UploadFile = File(...),
-    folder: str = Form(default="tpp/products"),
+    folder: str = Form(default=PRODUCTS_FOLDER),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
@@ -68,7 +74,7 @@ async def upload(
         url=result["url"],
         public_id=result["public_id"],
         resource_type=result["resource_type"],
-        folder=folder,
+        folder=result["folder"],
     )
     db.add(media)
     await db.commit()
@@ -83,7 +89,7 @@ async def upload_ocr(
     _user: dict = Depends(get_current_user),
 ):
     try:
-        result = await cloudinary_service.upload_file(file, "tpp/ocr")
+        result = await cloudinary_service.upload_file(file, OCR_FOLDER)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -94,7 +100,7 @@ async def upload_ocr(
         url=result["url"],
         public_id=result["public_id"],
         resource_type=result["resource_type"],
-        folder="tpp/ocr",
+        folder=result["folder"],
     )
     db.add(media)
     await db.commit()
@@ -125,7 +131,7 @@ async def upload_temp(
         url=result["url"],
         public_id=result["public_id"],
         resource_type=result["resource_type"],
-        folder=TEMP_OCR_FOLDER,
+        folder=result["folder"],
     )
     db.add(media)
     await db.commit()
@@ -162,7 +168,7 @@ async def purge_temp(
 
     rows = await db.execute(
         select(MediaFile).where(
-            MediaFile.folder == TEMP_OCR_FOLDER,
+            MediaFile.folder.in_(folder_aliases(TEMP_OCR_FOLDER)),
             MediaFile.created_at < cutoff,
         )
     )
