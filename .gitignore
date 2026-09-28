@@ -2,3 +2,9 @@ __pycache__/
 .venv/
 .env
 storage.db
+
+# Testing Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
