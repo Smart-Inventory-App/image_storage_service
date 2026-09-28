@@ -40,9 +40,9 @@ async def _upload(client, file_bytes, content_type, folder, cloudinary_result):
 # ---------------------------------------------------------------------------
 
 async def test_upload_product_image_success():
-    fake = _fake_cloudinary_result("bazaar/products", "abc")
+    fake = _fake_cloudinary_result("tpp/products", "abc")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "bazaar/products", fake)
+        r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "tpp/products", fake)
 
     assert r.status_code == 200
     assert r.json() == {"url": fake["secure_url"]}
@@ -54,10 +54,10 @@ async def test_upload_unregistered_folder_rejected():
         r = await c.post(
             "/storage/upload",
             files={"file": ("photo.jpg", _make_jpeg_bytes(), "image/jpeg")},
-            data={"folder": "bazaar/general"},
+            data={"folder": "tpp/general"},
         )
     assert r.status_code == 400
-    assert "bazaar/general" in r.json()["detail"]
+    assert "tpp/general" in r.json()["detail"]
 
 
 async def test_upload_unsupported_format():
@@ -78,7 +78,7 @@ async def test_upload_too_large():
             r = await c.post(
                 "/storage/upload",
                 files={"file": ("photo.jpg", _make_jpeg_bytes(), "image/jpeg")},
-                data={"folder": "bazaar/products"},
+                data={"folder": "tpp/products"},
             )
     assert r.status_code == 400
     assert "supera" in r.json()["detail"]
@@ -89,10 +89,10 @@ async def test_upload_too_large():
 # ---------------------------------------------------------------------------
 
 async def test_delete_image_success():
-    fake = _fake_cloudinary_result("bazaar/products", "abc")
+    fake = _fake_cloudinary_result("tpp/products", "abc")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        upload_r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "bazaar/products", fake)
+        upload_r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "tpp/products", fake)
     assert upload_r.status_code == 200
     url = upload_r.json()["url"]
 
@@ -146,9 +146,9 @@ async def test_readyz_fail():
 # ---------------------------------------------------------------------------
 
 async def test_upload_webp_success():
-    fake = _fake_cloudinary_result("bazaar/products", "webp_img")
+    fake = _fake_cloudinary_result("tpp/products", "webp_img")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        r = await _upload(c, _make_jpeg_bytes(), "image/webp", "bazaar/products", fake)
+        r = await _upload(c, _make_jpeg_bytes(), "image/webp", "tpp/products", fake)
     assert r.status_code == 200
     assert r.json() == {"url": fake["secure_url"]}
 
@@ -163,7 +163,7 @@ async def test_upload_cloudinary_error_returns_500():
             r = await c.post(
                 "/storage/upload",
                 files={"file": ("photo.jpg", _make_jpeg_bytes(), "image/jpeg")},
-                data={"folder": "bazaar/products"},
+                data={"folder": "tpp/products"},
             )
     assert r.status_code == 500
     assert "timeout" in r.json()["detail"]
@@ -174,10 +174,10 @@ async def test_upload_cloudinary_error_returns_500():
 # ---------------------------------------------------------------------------
 
 async def test_delete_cloudinary_error_returns_500():
-    fake = _fake_cloudinary_result("bazaar/products", "err_img")
+    fake = _fake_cloudinary_result("tpp/products", "err_img")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        upload_r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "bazaar/products", fake)
+        upload_r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "tpp/products", fake)
     url = upload_r.json()["url"]
 
     with patch("cloudinary.uploader.destroy", return_value={"result": "error"}):
@@ -188,10 +188,10 @@ async def test_delete_cloudinary_error_returns_500():
 
 async def test_delete_twice_second_returns_404():
     """Después de borrar, un segundo intento con la misma URL devuelve 404."""
-    fake = _fake_cloudinary_result("bazaar/products", "double_del")
+    fake = _fake_cloudinary_result("tpp/products", "double_del")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        upload_r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "bazaar/products", fake)
+        upload_r = await _upload(c, _make_jpeg_bytes(), "image/jpeg", "tpp/products", fake)
     url = upload_r.json()["url"]
 
     with patch("cloudinary.uploader.destroy", return_value={"result": "ok"}):
@@ -217,7 +217,7 @@ async def _upload_temp(client, cloudinary_result):
 
 
 async def test_upload_temp_returns_url_and_expiry():
-    fake = _fake_cloudinary_result("bazaar/ocr-temp", "scan1")
+    fake = _fake_cloudinary_result("tpp/ocr-temp", "scan1")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await _upload_temp(c, fake)
 
@@ -229,7 +229,7 @@ async def test_upload_temp_returns_url_and_expiry():
 
 
 async def test_discard_temp_success():
-    fake = _fake_cloudinary_result("bazaar/ocr-temp", "scan2")
+    fake = _fake_cloudinary_result("tpp/ocr-temp", "scan2")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         url = (await _upload_temp(c, fake)).json()["url"]
 
@@ -244,9 +244,9 @@ async def test_discard_temp_success():
 
 async def test_discard_temp_rejects_persistent_image():
     """/temp no puede borrar imágenes de carpetas persistentes."""
-    fake = _fake_cloudinary_result("bazaar/products", "keep_me")
+    fake = _fake_cloudinary_result("tpp/products", "keep_me")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        url = (await _upload(c, _make_jpeg_bytes(), "image/jpeg", "bazaar/products", fake)).json()["url"]
+        url = (await _upload(c, _make_jpeg_bytes(), "image/jpeg", "tpp/products", fake)).json()["url"]
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.request("DELETE", "/storage/temp", json={"url": url})
@@ -257,7 +257,7 @@ async def test_discard_temp_rejects_persistent_image():
 async def test_purge_temp_removes_only_expired():
     import app.routes.storage as storage_routes
 
-    fake = _fake_cloudinary_result("bazaar/ocr-temp", "stale")
+    fake = _fake_cloudinary_result("tpp/ocr-temp", "stale")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         await _upload_temp(c, fake)
 
@@ -272,7 +272,7 @@ async def test_purge_temp_removes_only_expired():
 
 
 async def test_purge_temp_keeps_fresh_uploads():
-    fake = _fake_cloudinary_result("bazaar/ocr-temp", "fresh")
+    fake = _fake_cloudinary_result("tpp/ocr-temp", "fresh")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         await _upload_temp(c, fake)
 
