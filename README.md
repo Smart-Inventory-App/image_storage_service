@@ -1,4 +1,6 @@
-# image_storage_service — Smart Inventory
+# Image Storage Service — Smart Inventory Platform
+
+[![codecov](https://codecov.io/gh/Smart-Inventory-App/image_storage_service/branch/main/graph/badge.svg?token=FP5HXcTGyd)](https://codecov.io/gh/Smart-Inventory-App/image_storage_service)
 
 Microservicio de almacenamiento de imágenes. Sube y elimina archivos en Cloudinary, y persiste la relación `url → public_id` en SQLite para que los servicios consumidores solo operen con URLs públicas.
 
