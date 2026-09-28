@@ -1,7 +1,5 @@
 # image_storage_service — Smart Inventory
 
-[![codecov](https://codecov.io/gh/bazaar-tpg/external_storage_service/graph/badge.svg?token=MW6HMDN0F9)](https://codecov.io/gh/bazaar-tpg/external_storage_service)
-
 Microservicio de almacenamiento de imágenes. Sube y elimina archivos en Cloudinary, y persiste la relación `url → public_id` en SQLite para que los servicios consumidores solo operen con URLs públicas.
 
 ---
@@ -28,7 +26,7 @@ Sube una imagen de producto a Cloudinary.
 | Campo | Tipo | Requerido | Default |
 |-------|------|-----------|---------|
 | `file` | archivo | sí | — |
-| `folder` | string | no | `bazaar/products` |
+| `folder` | string | no | `tpp/products` |
 
 **Respuesta 200:**
 ```json
@@ -68,7 +66,7 @@ Se comprime menos que las carpetas persistentes (hasta 2000 px de ancho, JPEG qu
 **Respuesta 200:**
 ```json
 {
-  "url": "https://res.cloudinary.com/.../bazaar/ocr-temp/abc.jpg",
+  "url": "https://res.cloudinary.com/.../tpp/ocr-temp/abc.jpg",
   "expires_at": "2026-07-29T20:29:03",
   "ttl_seconds": 900
 }
@@ -145,11 +143,13 @@ Readiness probe. Hace ping a Cloudinary.
 
 | Carpeta | Endpoint | Límite | Compresión | Persistencia |
 |---------|----------|--------|------------|--------------|
-| `bazaar/products` | `/storage/upload` | 10 MB | 1200 px · q85 | permanente |
-| `bazaar/ocr` | `/storage/ocr` | 10 MB | 1200 px · q85 | permanente |
-| `bazaar/ocr-temp` | `/storage/temp` | 10 MB | 2000 px · q95 | efímera (TTL 15 min) |
+| `tpp/products` | `/storage/upload` | 10 MB | 1200 px · q85 | permanente |
+| `tpp/ocr` | `/storage/ocr` | 10 MB | 1200 px · q85 | permanente |
+| `tpp/ocr-temp` | `/storage/temp` | 10 MB | 2000 px · q95 | efímera (TTL 15 min) |
 
-Las imágenes se comprimen automáticamente antes de subirse a Cloudinary. La carpeta temporal preserva más resolución y calidad porque el OCR aplica su propio pipeline de filtros sobre ella.
+Las imágenes se comprimen automáticamente antes de subirse a Cloudinary. La carpeta temporal preserva más resolución y calidad porque el OCR aplica su propio pipeline de filtros sobre ella. Un archivo que declara un formato de imagen pero no se puede leer como tal se rechaza con `400`.
+
+**Nombres heredados.** Las carpetas usaban antes el prefijo `bazaar/`. `bazaar/products`, `bazaar/ocr` y `bazaar/ocr-temp` se siguen aceptando en `folder` y se guardan con su nombre `tpp/` equivalente; las imágenes temporales registradas con el nombre viejo se siguen descartando (`DELETE /storage/temp`) y purgando (`POST /storage/temp/purge`).
 
 ---
 
@@ -262,7 +262,7 @@ La imagen que se escanea no se conserva: existe sólo mientras el OCR la procesa
 ocr_service
   │  1) POST /storage/temp  (file, Bearer token)
   ▼
-image_storage_service  ──►  Cloudinary (bazaar/ocr-temp)
+image_storage_service  ──►  Cloudinary (tpp/ocr-temp)
   │  { "url": ..., "expires_at": ... }
   ▼
 ocr_service  descarga la URL, aplica sus filtros (OpenCV) y reconoce el texto
@@ -285,7 +285,7 @@ async def upload_product_image(file_bytes: bytes, filename: str, token: str) -> 
             "http://storage_service:8004/storage/upload",
             headers={"Authorization": f"Bearer {token}"},
             files={"file": (filename, file_bytes, "image/jpeg")},
-            data={"folder": "bazaar/products"},
+            data={"folder": "tpp/products"},
             timeout=30.0,
         )
         r.raise_for_status()
