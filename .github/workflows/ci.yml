@@ -29,3 +29,12 @@ jobs:
 
       - name: Run tests with coverage
         run: pytest tests/ -v --cov-fail-under=90
+
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./storage_service/coverage.xml
+          flags: storage
+          fail_ci_if_error: false

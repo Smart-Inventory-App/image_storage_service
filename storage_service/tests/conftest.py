@@ -33,6 +33,6 @@ async def setup_test_db():
     # La validación del JWT se testea en el servicio Auth; acá se inyecta un
     # usuario ya autenticado para poder ejercitar las rutas protegidas.
     app.dependency_overrides[get_current_user] = lambda: {"sub": "test-user"}
-    yield
+    yield session_factory
     app.dependency_overrides.clear()
     await engine.dispose()
