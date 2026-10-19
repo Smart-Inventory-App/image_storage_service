@@ -4,7 +4,7 @@ import logging
 import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.core.config import settings
 
@@ -147,6 +147,10 @@ def _compress(
     quality: int = DEFAULT_QUALITY,
 ) -> bytes:
     image = Image.open(io.BytesIO(contents))
+
+    # Las fotos del celular guardan su orientación en el EXIF y no en los píxeles. Al volver a
+    # codificar el JPEG el EXIF se pierde, así que hay que girar la imagen antes: si no, queda rotada.
+    image = ImageOps.exif_transpose(image)
 
     if image.width > max_width:
         ratio = max_width / image.width

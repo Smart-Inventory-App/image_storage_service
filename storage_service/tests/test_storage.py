@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
 from app.main import app
+from app.services.cloudinary_service import _compress
 
 
 # ---------------------------------------------------------------------------
@@ -348,3 +349,50 @@ async def test_compress_converts_palette_to_rgb():
 
     out = Image.open(io.BytesIO(result))
     assert out.mode == "RGB"
+
+
+# ---------------------------------------------------------------------------
+# Orientación EXIF
+# ---------------------------------------------------------------------------
+
+def _make_jpeg_with_orientation(orientation: int, width: int = 100, height: int = 50) -> bytes:
+    img = Image.new("RGB", (width, height), color=(0, 128, 255))
+    exif = Image.Exif()
+    exif[0x0112] = orientation
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=exif)
+    return buf.getvalue()
+
+
+def _size_after_compress(contents: bytes) -> tuple[int, int]:
+    return Image.open(io.BytesIO(_compress(contents))).size
+
+
+def test_compress_rotates_photos_taken_with_the_phone_on_its_side():
+    # orientación 6 y 8: el celular estaba girado 90°; la foto debe quedar de pie (ancho y alto intercambiados)
+    assert _size_after_compress(_make_jpeg_with_orientation(6)) == (50, 100)
+    assert _size_after_compress(_make_jpeg_with_orientation(8)) == (50, 100)
+
+
+def test_compress_flips_upside_down_photos_without_swapping_sides():
+    assert _size_after_compress(_make_jpeg_with_orientation(3)) == (100, 50)
+
+
+def test_compress_keeps_photos_that_are_already_upright():
+    assert _size_after_compress(_make_jpeg_with_orientation(1)) == (100, 50)
+    assert _size_after_compress(_make_jpeg_bytes(100, 50)) == (100, 50)
+
+
+async def test_upload_sends_the_rotated_image_to_cloudinary():
+    fake = _fake_cloudinary_result("tpp/products", "rot")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        with patch("cloudinary.uploader.upload", return_value=fake) as upload:
+            r = await c.post(
+                "/storage/upload",
+                files={"file": ("file", _make_jpeg_with_orientation(6), "image/jpeg")},
+                data={"folder": "tpp/products"},
+            )
+
+    assert r.status_code == 200
+    sent = upload.call_args.args[0]
+    assert Image.open(io.BytesIO(sent)).size == (50, 100)
